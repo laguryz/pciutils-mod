@@ -1,7 +1,5 @@
-diff --git "a/pciutils-3.5.6\\lspci.c" "b/pciutils-3.5.6-mod-release\\lspci.c"
-index c6f1500..7f0b28e 100644
---- "a/pciutils-3.5.6\\lspci.c"
-+++ "b/pciutils-3.5.6-mod-release\\lspci.c"
+--- "a/lspci.c"
++++ "b/lspci.c"
 @@ -25,11 +25,12 @@ static int opt_domains;			/* Show domain numbers (0=disabled, 1=auto-detected, 2
  static int opt_kernel;			/* Show kernel drivers */
  static int opt_query_dns;		/* Query the DNS (0=disabled, 1=enabled, 2=refresh cache) */
