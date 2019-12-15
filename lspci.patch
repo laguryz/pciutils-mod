@@ -1,10 +1,10 @@
---- "..\\pciutils-3.5.6\\lspci.c"	2017-02-25 05:22:31.000000000 +0900
-+++ "..\\pciutils-3.5.6-mod\\lspci.c"	2019-12-15 18:52:04.763952600 +0900
+--- "a/lspci.c"	2017-02-25 05:22:31.000000000 +0900
++++ "b/lspci.c"	2019-12-16 01:42:20.647664400 +0900
 @@ -25,11 +25,12 @@
  static int opt_kernel;			/* Show kernel drivers */
  static int opt_query_dns;		/* Query the DNS (0=disabled, 1=enabled, 2=refresh cache) */
  static int opt_query_all;		/* Query the DNS for all entries */
-+static int opt_bus_speed;       /* リンク詳細を表示するモード
++static int opt_link_speed;       /* リンク詳細を表示するモード*/
  char *opt_pcimap;			/* Override path to Linux modules.pcimap */
  
  const char program_name[] = "lspci";
@@ -22,144 +22,15 @@
  "\n"
  "Resolving of device ID's to names:\n"
  "-n\t\tShow numeric ID's\n"
-@@ -75,11 +77,11 @@
- 
- /*** Our view of the PCI bus ***/
- 
--struct pci_access *pacc;
--struct device *first_dev;
--static int seen_errors;
-+struct pci_access *pacc; //pcieデバイスへのアクセスモード等を書いた構造体 lib/pci.hにて定義 struct
-+device *first_dev; //lspci.hで宣言されていたextern ls-tree.cでも定義されている
-+ツリー表示の為に用意されてるらしい？ static int seen_errors;
- 
--int
-+int//PCIデバイス自体のコンフィグを読む関数っぽい
- config_fetch(struct device *d, unsigned int pos, unsigned int len)
- {
-   unsigned int end = pos+len;
-@@ -108,37 +110,37 @@
- }
- 
- struct device *
--scan_device(struct pci_dev *p)
-+scan_device(struct pci_dev *p)//1デバイスのスキャン
- {
--  struct device *d;
-+  struct device *d;//「PCI devices and access to their config space」 lspci.hで定義
- 
-   if (p->domain && !opt_domains)
-     opt_domains = 1;
-   if (!pci_filter_match(&filter, p))
-     return NULL;
--  d = xmalloc(sizeof(struct device));
-+  d = xmalloc(sizeof(struct device));//ハンドリング付きのmalloc common.cで定義
-   memset(d, 0, sizeof(*d));
-   d->dev = p;
-   d->config_cached = d->config_bufsize = 64;
-   d->config = xmalloc(64);
--  d->present = xmalloc(64);
-+  d->present = xmalloc(64);//「Maps which configuration bytes are present」
-   memset(d->present, 1, 64);
--  if (!pci_read_block(p, 0, d->config, 64))
-+  if (!pci_read_block(p, 0, d->config, 64))//ヘッダ読み出しとエラーハンドリング
-     {
-       fprintf(stderr, "lspci: Unable to read the standard configuration space header of device %04x:%02x:%02x.%d\n",
- 	      p->domain, p->bus, p->dev, p->func);
-       seen_errors++;
-       return NULL;
-     }
--  if ((d->config[PCI_HEADER_TYPE] & 0x7f) == PCI_HEADER_TYPE_CARDBUS)
-+  if ((d->config[PCI_HEADER_TYPE] & 0x7f) == PCI_HEADER_TYPE_CARDBUS)//PCMCIAとかのカードバス用っぽい
-     {
-       /* For cardbus bridges, we need to fetch 64 bytes more to get the
-        * full standard header... */
-       if (config_fetch(d, 64, 64))
- 	d->config_cached += 64;
-     }
--  pci_setup_cache(p, d->config, d->config_cached);
--  pci_fill_info(p, PCI_FILL_IDENT | PCI_FILL_CLASS);
-+  pci_setup_cache(p, d->config, d->config_cached);//多分関係ない(キャッシュ)
-+  pci_fill_info(p, PCI_FILL_IDENT | PCI_FILL_CLASS);//多分これが本命 
-   return d;
- }
- 
-@@ -148,11 +150,11 @@
-   struct device *d;
-   struct pci_dev *p;
- 
--  pci_scan_bus(pacc);
--  for (p=pacc->devices; p; p=p->next)
--    if (d = scan_device(p))
-+  pci_scan_bus(pacc);//バス上のデバイスをスキャン？ take_pacc->methods->scan(a);呼んでるだけだから各実装依存の処理っぽい
-+  for (p=pacc->devices; p; p=p->next)//デバイスリストをぶん回す
-+    if (d = scan_device(p))//device型にスキャン結果を代入
-       {
--	d->next = first_dev;
-+	d->next = first_dev;//「Next device in the chain」らしいけどなんでfirst_dev突っ込むのか不明
- 	first_dev = d;
-       }
- }
-@@ -669,7 +671,7 @@
- {
-   struct pci_dev *p = d->dev;
-   word status = get_conf_word(d, PCI_STATUS);
--  word cmd = get_conf_word(d, PCI_COMMAND);
-+  word cmd = get_conf_word(d, PCI_COMMAND);//ここでPCIeか見ている?
-   word class = p->device_class;
-   byte bist = get_conf_byte(d, PCI_BIST);
-   byte htype = get_conf_byte(d, PCI_HEADER_TYPE) & 0x7f;
-@@ -726,8 +728,8 @@
- 	     FLAG(cmd, PCI_COMMAND_FAST_BACK),
- 	     FLAG(cmd, PCI_COMMAND_DISABLE_INTx));
-       printf("\tStatus: Cap%c 66MHz%c UDF%c FastB2B%c ParErr%c DEVSEL=%s >TAbort%c <TAbort%c <MAbort%c >SERR%c <PERR%c INTx%c\n",
--	     FLAG(status, PCI_STATUS_CAP_LIST),
--	     FLAG(status, PCI_STATUS_66MHZ),
-+	     FLAG(status, PCI_STATUS_CAP_LIST),//+か- PCIe等Capabilitiesが表示されるものは+でされないものは-
-+	     FLAG(status, PCI_STATUS_66MHZ),//多分PCIの
- 	     FLAG(status, PCI_STATUS_UDF),
- 	     FLAG(status, PCI_STATUS_FAST_BACK),
- 	     FLAG(status, PCI_STATUS_PARITY),
-@@ -739,8 +741,8 @@
- 	     FLAG(status, PCI_STATUS_REC_MASTER_ABORT),
- 	     FLAG(status, PCI_STATUS_SIG_SYSTEM_ERROR),
- 	     FLAG(status, PCI_STATUS_DETECTED_PARITY),
--	     FLAG(status, PCI_STATUS_INTx));
--      if (cmd & PCI_COMMAND_MASTER)
-+	     FLAG(status, PCI_STATUS_INTx));//ここまではPCI/PCIe共通
-+      if (cmd & PCI_COMMAND_MASTER)//バスマスタ(デバイスからトランザクション発行できるもの)の場合
- 	{
- 	  printf("\tLatency: %d", latency);
- 	  if (min_gnt || max_lat)
-@@ -800,7 +802,7 @@
- 	printf("\tBIST result: %02x\n", bist & PCI_BIST_CODE_MASK);
-     }
- 
--  switch (htype)
-+  switch (htype)//ヘッダタイプ見て分岐している
-     {
-     case PCI_HEADER_TYPE_NORMAL:
-       show_htype0(d);
-@@ -814,6 +816,55 @@
+@@ -814,6 +816,60 @@
      }
  }
  
 +/*** Show link speed information ***/
-+static char *link_speed_string(int speed, int secondary)
++static char *link_speed_string(int speed)
 +{
-+    if(!secondary)
-+    switch(t & PCI_EXP_LNKCAP_SPEED)
++  switch(speed & PCI_EXP_LNKCAP_SPEED)
 +  {
-+    case 1: return "Gen1(2.5GT/s)";
-+    case 2: return "Gen2(5GT/s)";
-+    case 3: return "Gen3(8GT/s)";
-+    case 4: return "Gen4(16GT/s)";
-+    default: return "Unknown";
-+  }
-+    else
-+    switch(t & PCI_EXP_LNKCAP_SPEED)
-+  {
-+    case 0:
 +    case 1: return "Gen1(2.5GT/s)";
 +    case 2: return "Gen2(5GT/s)";
 +    case 3: return "Gen3(8GT/s)";
@@ -168,27 +39,43 @@
 +  }
 +}
 +static void
-+show_link_speed(struct device *d)
++show_link_speed(struct device *d)//ほぼls-caps.c:show_capsのパクり
 +{
-+  int cap = get_conf_word(d, PCI_CAPABILITY_LIST + PCI_CAP_FLAGS);
-+  byte id = get_conf_byte(d, PCI_CAPABILITY_LIST + PCI_CAP_LIST_ID);
++  unsigned int where;
 +  u32 t,w;
-+  printf("\tLink Info: \n");
-+    if(PCI_CAP_ID_EXP != id)
-+      printf("\t\tnon PCI-e device, skipping.\n");
-+    else
++
++    if (get_conf_word(d, PCI_STATUS) & PCI_STATUS_CAP_LIST)
 +  {
-+    //primary capabilities
-+    t = get_conf_long(d, where + PCI_EXP_LNKCAP);
-+    printf("\t\tCapability: Port #%d, Speed %s, Width(lanes) x%d\n",
-+      t >> 24,
-+      link_speed_string(t & PCI_EXP_LNKCAP_SPEED),
-+      (t & PCI_EXP_LNKCAP_WIDTH) >> 4);
-+    w = get_conf_word(d, where + PCI_EXP_LNKSTA);
-+    printf("\t\tLinkStatus: Speed %s, Width(lanes) x%d\n",
-+      link_speed(w & PCI_EXP_LNKSTA_SPEED),
-+      (w & PCI_EXP_LNKSTA_WIDTH) >> 4)
-+    //Secondary Capabilitiesはディエンファシスとかいらないから無し
++    where = get_conf_byte(d, PCI_CAPABILITY_LIST) & ~3;//フラグ探索初期値
++    printf("\tLink Info: \n");
++      while(where)//ぶん回す
++    {
++      if (!config_fetch(d, where, 4))//どう足掻いてもアクセスできないデバイスもあるらしいので弾く
++          break;
++
++      int next,cap,id,type;
++      id   = get_conf_byte(d, where + PCI_CAP_LIST_ID);//フィールド用のオフセット
++      next = get_conf_byte(d, where + PCI_CAP_LIST_NEXT) & ~3;
++      cap  = get_conf_word(d, where + PCI_CAP_FLAGS);
++      type = (cap & PCI_EXP_FLAGS_TYPE) >> 4;
++      //PCIeキャパビリティを見つけたときのみかつ対象がエンドポイントの場合のみ実行
++        if(config_fetch(d, where + PCI_EXP_DEVCAP, 16)
++           && PCI_CAP_ID_EXP==id
++           && (PCI_EXP_TYPE_ENDPOINT==type || PCI_EXP_TYPE_LEG_END==type))
++      {
++        t = get_conf_long(d, where + PCI_EXP_LNKCAP);
++        printf("\t\tCapability: Port #%d, Speed %s, Width(lanes) x%d\n",
++          t >> 24,
++          link_speed_string(t & PCI_EXP_LNKCAP_SPEED),
++          (t & PCI_EXP_LNKCAP_WIDTH) >> 4);
++        w = get_conf_word(d, where + PCI_EXP_LNKSTA);
++        printf("\t\tLinkStatus: Speed %s, Width(lanes) x%d\n",
++          link_speed_string(w & PCI_EXP_LNKSTA_SPEED),
++          (w & PCI_EXP_LNKSTA_WIDTH) >> 4);
++        //Secondary Capabilitiesはディエンファシスと見ないし無しで
++      }
++      where = next;
++    }
 +  }
 +}
 +
@@ -196,15 +83,8 @@
  /*** Machine-readable dumps ***/
  
  static void
-@@ -923,11 +974,13 @@
-   else
-     {
-       if (verbose)
--	show_verbose(d);
-+	show_verbose(d);//詳細表示か
-       else
--	show_terse(d);
-+	show_terse(d);//簡易表示(標準)か
+@@ -928,6 +984,8 @@
+ 	show_terse(d);
        if (opt_kernel || verbose)
  	show_kernel(d);
 +      if (opt_link_speed && 2>verbose)
@@ -212,7 +92,7 @@
      }
    if (opt_hex)
      show_hex_dump(d);
-@@ -954,17 +1007,17 @@
+@@ -954,7 +1012,7 @@
  
    if (argc == 2 && !strcmp(argv[1], "--version"))
      {
@@ -220,53 +100,14 @@
 +      puts("lspci version " PCIUTILS_VERSION ":ebuild-user-patched");
        return 0;
      }
--
--  pacc = pci_alloc();
-+//pacc=PCIデバイスへのアクセスメソッドとかオプションとか固めてる構造体
-+  pacc = pci_alloc();//配列を確保してゼロフィルして初期設定を施す 失敗したらstderrにログ吐いてreturn init.c参照
-   pacc->error = die;
--  pci_filter_init(pacc, &filter);
-+  pci_filter_init(pacc, &filter);//フィルタの初期化っぽい(メンバを-1で埋めてる)
  
--  while ((i = getopt(argc, argv, options)) != -1)
--    switch (i)
--      {
-+  while ((i = getopt(argc, argv, options)) != -1)//標準ライブラリ関数 compat/getoptでも定義
-+    switch (i)//ひたすらコマンドのオプション処理でフラグ立てるだけ
-+      {//わかりにくいけど上のwhileはこのswitchだけにかかってるっぽい(ブロックなし一行)
-       case 'n':
- 	pacc->numeric_ids++;
- 	break;
-@@ -1020,14 +1073,17 @@
+@@ -1020,6 +1078,9 @@
        case 'Q':
  	die("DNS queries are not available in this version");
  #endif
 +      case 'l':
-+    opt_bus_speed++;
++    opt_link_speed++;
 +    break;
        default:
--	if (parse_generic_option(i, pacc, optarg))
-+	if (parse_generic_option(i, pacc, optarg))//common.cにて定義
+ 	if (parse_generic_option(i, pacc, optarg))
  	  break;
-       bad:
- 	fprintf(stderr, help_msg, pacc->id_file_name);
- 	return 1;
-       }
--  if (optind < argc)
-+  if (optind < argc)//ここから下にwhileはかからない
-     goto bad;
- 
-   if (opt_query_dns)
-@@ -1038,9 +1094,9 @@
-     }
-   if (opt_query_all)
-     pacc->id_lookup_mode |= PCI_LOOKUP_NETWORK | PCI_LOOKUP_SKIP_LOCAL;
--
--  pci_init(pacc);
--  if (opt_map_mode)
-+//こっから本番処理？ 
-+  pci_init(pacc);//渡してるのはメモリ確保した後に必要そうなフラグだけ立てたpci_access構造体
-+  if (opt_map_mode)//バスマッピングモード(広域スキャンで危険) rootのみ表示が変わる 
-     map_the_bus();
-   else
-     {
