@@ -1,0 +1,116 @@
+diff --git "a/pciutils-3.5.6\\lspci.c" "b/pciutils-3.5.6-mod-release\\lspci.c"
+index c6f1500..7f0b28e 100644
+--- "a/pciutils-3.5.6\\lspci.c"
++++ "b/pciutils-3.5.6-mod-release\\lspci.c"
+@@ -25,11 +25,12 @@ static int opt_domains;			/* Show domain numbers (0=disabled, 1=auto-detected, 2
+ static int opt_kernel;			/* Show kernel drivers */
+ static int opt_query_dns;		/* Query the DNS (0=disabled, 1=enabled, 2=refresh cache) */
+ static int opt_query_all;		/* Query the DNS for all entries */
++static int opt_link_speed;       /* リンク詳細を表示するモード*/
+ char *opt_pcimap;			/* Override path to Linux modules.pcimap */
+ 
+ const char program_name[] = "lspci";
+ 
+-static char options[] = "nvbxs:d:ti:mgp:qkMDQ" GENERIC_OPTIONS ;
++static char options[] = "nvbxs:d:ti:mgp:qkMDQl" GENERIC_OPTIONS ;
+ 
+ static char help_msg[] =
+ "Usage: lspci [<switches>]\n"
+@@ -48,6 +49,7 @@ static char help_msg[] =
+ "-xxxx\t\tShow hex-dump of the 4096-byte extended config space (root only)\n"
+ "-b\t\tBus-centric view (addresses and IRQ's as seen by the bus)\n"
+ "-D\t\tAlways show domain numbers\n"
++"-l\t\tShow bus-speed information(root only)\n"
+ "\n"
+ "Resolving of device ID's to names:\n"
+ "-n\t\tShow numeric ID's\n"
+@@ -814,6 +816,61 @@ show_verbose(struct device *d)
+     }
+ }
+ 
++/*** Show link speed information ***/
++static char *link_speed_string(int speed)
++{
++  switch(speed & PCI_EXP_LNKCAP_SPEED)
++  {
++    case 1: return "Gen1(2.5GT/s)";
++    case 2: return "Gen2(5GT/s)";
++    case 3: return "Gen3(8GT/s)";
++    case 4: return "Gen4(16GT/s)";
++    default: return "Unknown";
++  }
++}
++static void
++show_link_speed(struct device *d)//ほぼls-caps.c:show_capsのパクり
++{
++  unsigned int where;
++  u32 t,w;
++
++    if (get_conf_word(d, PCI_STATUS) & PCI_STATUS_CAP_LIST)
++  {
++    printed = 0;
++    where = get_conf_byte(d, PCI_CAPABILITY_LIST) & ~3;//フラグ探索初期値
++    printf("\tLink Info: \n");
++      while(where)//ぶん回す
++    {
++      if (!config_fetch(d, where, 4))//どう足掻いてもアクセスできないデバイスもあるらしいので弾く
++          break;
++
++      int next,cap,id,type;
++      id   = get_conf_byte(d, where + PCI_CAP_LIST_ID);//フィールド用のオフセット
++      next = get_conf_byte(d, where + PCI_CAP_LIST_NEXT) & ~3;
++      cap  = get_conf_word(d, where + PCI_CAP_FLAGS);
++      type = (cap & PCI_EXP_FLAGS_TYPE) >> 4;
++      //PCIeキャパビリティを見つけたときのみかつ対象がエンドポイントの場合のみ実行
++        if(config_fetch(d, where + PCI_EXP_DEVCAP, 16)
++           && PCI_CAP_ID_EXP==id
++           && (PCI_EXP_TYPE_ENDPOINT==type || PCI_EXP_TYPE_LEG_END==type))
++      {
++        t = get_conf_long(d, where + PCI_EXP_LNKCAP);
++        printf("\t\tCapability: Port #%d, Speed %s, Width(lanes) x%d\n",
++          t >> 24,
++          link_speed_string(t & PCI_EXP_LNKCAP_SPEED),
++          (t & PCI_EXP_LNKCAP_WIDTH) >> 4);
++        w = get_conf_word(d, where + PCI_EXP_LNKSTA);
++        printf("\t\tLinkStatus: Speed %s, Width(lanes) x%d\n",
++          link_speed_string(w & PCI_EXP_LNKSTA_SPEED),
++          (w & PCI_EXP_LNKSTA_WIDTH) >> 4);
++        //Secondary Capabilitiesはディエンファシスと見ないし無しで
++      }
++      where = next;
++    }
++  }
++}
++
++
+ /*** Machine-readable dumps ***/
+ 
+ static void
+@@ -928,6 +985,8 @@ show_device(struct device *d)
+ 	show_terse(d);
+       if (opt_kernel || verbose)
+ 	show_kernel(d);
++      if (opt_link_speed && 2>verbose)
++    show_link_speed(d);
+     }
+   if (opt_hex)
+     show_hex_dump(d);
+@@ -954,7 +1013,7 @@ main(int argc, char **argv)
+ 
+   if (argc == 2 && !strcmp(argv[1], "--version"))
+     {
+-      puts("lspci version " PCIUTILS_VERSION);
++      puts("lspci version " PCIUTILS_VERSION ":ebuild-user-patched");
+       return 0;
+     }
+ 
+@@ -1020,6 +1079,9 @@ main(int argc, char **argv)
+       case 'Q':
+ 	die("DNS queries are not available in this version");
+ #endif
++      case 'l':
++    opt_link_speed++;
++    break;
+       default:
+ 	if (parse_generic_option(i, pacc, optarg))
+ 	  break;
